@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react";
 import CertioLogo from "@/components/CertioLogo";
 import { certifyBatch } from "@/app/actions/certifyBatch";
-import { Loader2, CheckCircle2, AlertCircle, MapPin } from "lucide-react";
+import { CheckCircle2, AlertCircle, MapPin } from "lucide-react";
 import { useRouter } from "next/navigation";
+import PyramidLoader from "@/components/PyramidLoader";
 
 export default function NewBatchPage() {
     const [loading, setLoading] = useState(false);
@@ -22,11 +23,19 @@ export default function NewBatchPage() {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude
                     });
+                    setLocationError(null);
                 },
                 (error) => {
                     console.error("Error getting location", error);
-                    setLocationError("Ubicación no disponible");
-                }
+                    let errorMessage = "Ubicación no disponible";
+                    if (error.code === error.PERMISSION_DENIED) {
+                        errorMessage = "Permiso denegado. Activa la ubicación.";
+                    } else if (error.code === error.TIMEOUT) {
+                        errorMessage = "Tiempo de espera agotado.";
+                    }
+                    setLocationError(errorMessage);
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             );
         } else {
             setLocationError("Geolocalización no soportada");
@@ -65,6 +74,15 @@ export default function NewBatchPage() {
     // Generate acidity options 0.1 to 0.9
     const acidityOptions = Array.from({ length: 9 }, (_, i) => ((i + 1) / 10).toFixed(1));
 
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center z-50 fixed inset-0">
+                <PyramidLoader />
+                <p className="mt-8 text-olive-deep font-bold text-xl animate-pulse">Certificando en Blockchain...</p>
+            </div>
+        );
+    }
+
     return (
         <main className="min-h-screen bg-neutral-50 p-6 flex flex-col items-center">
             <CertioLogo variant="dark" fixed={true} />
@@ -92,7 +110,7 @@ export default function NewBatchPage() {
                                             {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
                                         </span>
                                     ) : (
-                                        <span className="text-amber-500">{locationError || "Detectando ubicación..."}</span>
+                                        <span className="text-amber-500">{locationError || "Detectando ubicación con alta precisión..."}</span>
                                     )}
                                 </div>
                             </div>
@@ -146,13 +164,7 @@ export default function NewBatchPage() {
                                             disabled={loading}
                                             className="w-full py-5 bg-olive-deep text-white text-xl font-bold rounded-2xl hover:bg-olive-deep/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-3"
                                         >
-                                            {loading ? (
-                                                <>
-                                                    <Loader2 className="animate-spin w-6 h-6" /> Procesando...
-                                                </>
-                                            ) : (
-                                                "CERTIFICAR AHORA"
-                                            )}
+                                            "CERTIFICAR AHORA"
                                         </button>
                                     </div>
                                 </div>
