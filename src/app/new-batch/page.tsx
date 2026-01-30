@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import CertioLogo from "@/components/CertioLogo";
 import { certifyBatch } from "@/app/actions/certifyBatch";
-import { CheckCircle2, AlertCircle, MapPin } from "lucide-react";
+import { CheckCircle2, AlertCircle, MapPin, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import PyramidLoader from "@/components/PyramidLoader";
 
@@ -15,7 +15,8 @@ export default function NewBatchPage() {
     const [selectedVariety, setSelectedVariety] = useState<string>("Picual");
     const router = useRouter();
 
-    useEffect(() => {
+    const requestLocation = () => {
+        setLocationError("Solicitando permisos...");
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
@@ -35,14 +36,19 @@ export default function NewBatchPage() {
                     }
                     setLocationError(errorMessage);
                 },
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         } else {
             setLocationError("Geolocalización no soportada");
         }
+    };
+
+    useEffect(() => {
+        requestLocation();
     }, []);
 
     async function handleSubmit(formData: FormData) {
+        // TRIGGER LOADER IMMEDIATELY
         setLoading(true);
         setStatus('idle');
 
@@ -67,6 +73,12 @@ export default function NewBatchPage() {
             console.error(e);
             setStatus('error');
         } finally {
+            // Keep loading true if success to show redirecting...
+            // Only turn off if error
+            if (status !== 'success') {
+                // setLoading(false); // OPTIONAL: If we want to stay in success state
+            }
+            // If error, we stop loading
             setLoading(false);
         }
     }
@@ -76,9 +88,9 @@ export default function NewBatchPage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center z-50 fixed inset-0">
+            <div className="min-h-screen bg-neutral-50 flex flex-col items-center justify-center z-50 fixed inset-0 animate-in fade-in duration-300">
                 <PyramidLoader />
-                <p className="mt-8 text-olive-deep font-bold text-xl animate-pulse">Certificando en Blockchain...</p>
+                <p className="mt-12 text-olive-deep font-bold text-xl animate-pulse font-serif tracking-widest">CERTIFICANDO EN BLOCKCHAIN...</p>
             </div>
         );
     }
@@ -106,11 +118,22 @@ export default function NewBatchPage() {
                                 <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
                                     <MapPin size={14} className={location ? "text-green-500" : "text-gray-400"} />
                                     {location ? (
-                                        <span className="text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">
+                                        <span className="text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full flex items-center gap-1">
                                             {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                                            <button onClick={requestLocation} className="ml-2 p-1 hover:bg-green-100 rounded-full transition-colors" title="Actualizar ubicación">
+                                                <RefreshCw size={10} />
+                                            </button>
                                         </span>
                                     ) : (
-                                        <span className="text-amber-500">{locationError || "Detectando ubicación con alta precisión..."}</span>
+                                        <button
+                                            onClick={requestLocation}
+                                            className="text-amber-500 hover:text-amber-600 underline decoration-dotted underline-offset-4 cursor-pointer hover:bg-amber-50 px-2 py-1 rounded-lg transition-all flex items-center gap-2"
+                                            title="Click para reintentar permiso"
+                                        >
+                                            <AlertCircle size={12} />
+                                            {locationError || "Detectando ubicación..."}
+                                            <span className="text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-1">Reintentar</span>
+                                        </button>
                                     )}
                                 </div>
                             </div>
@@ -162,7 +185,7 @@ export default function NewBatchPage() {
                                         <button
                                             type="submit"
                                             disabled={loading}
-                                            className="w-full py-5 bg-olive-deep text-white text-xl font-bold rounded-2xl hover:bg-olive-deep/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-3"
+                                            className="w-full py-5 bg-olive-deep text-white text-xl font-bold rounded-2xl hover:bg-olive-deep/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-3 active:scale-95"
                                         >
                                             "CERTIFICAR AHORA"
                                         </button>
