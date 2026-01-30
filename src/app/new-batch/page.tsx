@@ -1,165 +1,172 @@
 "use client";
 
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { Loader2, CheckCircle2 } from "lucide-react";
-import Image from "next/image";
+import { useState, useEffect } from "react";
+import CertioLogo from "@/components/CertioLogo";
+import { certifyBatch } from "@/app/actions/certifyBatch";
+import { Loader2, CheckCircle2, AlertCircle, MapPin } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 export default function NewBatchPage() {
-    const [variety, setVariety] = useState<string>("Picual");
-    const [acidity, setAcidity] = useState<string>("0.2");
     const [loading, setLoading] = useState(false);
-    const [success, setSuccess] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+    const [locationError, setLocationError] = useState<string | null>(null);
+    const [selectedVariety, setSelectedVariety] = useState<string>("Picual");
+    const router = useRouter();
 
-    const varieties = ["Arbequina", "Picual", "Hojiblanca"];
-    const acidities = ["0.1", "0.2", "0.3", "0.4", "0.5"];
+    useEffect(() => {
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setLocation({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    });
+                },
+                (error) => {
+                    console.error("Error getting location", error);
+                    setLocationError("Ubicación no disponible");
+                }
+            );
+        } else {
+            setLocationError("Geolocalización no soportada");
+        }
+    }, []);
 
-    const handleCertify = async () => {
+    async function handleSubmit(formData: FormData) {
         setLoading(true);
-        setError(null);
-        setSuccess(false);
+        setStatus('idle');
+
+        // Append manually controlled fields
+        formData.set('variedad', selectedVariety);
+        if (location) {
+            formData.set('lat', location.lat.toString());
+            formData.set('lng', location.lng.toString());
+        }
 
         try {
-            // 1. Capture Geolocation
-            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-                if (!navigator.geolocation) {
-                    reject(new Error("Geolocation not supported"));
-                }
-                navigator.geolocation.getCurrentPosition(resolve, (err) => {
-                    console.warn("Geolocation failed, using default:", err);
-                    resolve({
-                        coords: { latitude: 0.0, longitude: 0.0 }
-                    } as GeolocationPosition);
-                });
-            });
-
-            const { latitude, longitude } = position.coords;
-
-            // 2. Call Make.com via Server Action
-            // Ahora delegamos la creación del hash y el guardado en BD a Make.com
-            // (La Server Action certifyBatch llama al Webhook)
-            const { certifyBatch } = await import("@/app/actions/certifyBatch");
-            await certifyBatch({
-                variety,
-                acidity,
-                lat: latitude || 0.0,
-                lng: longitude || 0.0,
-            });
-
-            setSuccess(true);
-            setTimeout(() => setSuccess(false), 3000);
-
-        } catch (err: any) {
-            console.error("Error completo:", err);
-            if (err instanceof Error) {
-                console.error("Mensaje:", err.message);
+            const result = await certifyBatch(formData);
+            if (result.success) {
+                setStatus('success');
+                setTimeout(() => {
+                    router.push('/inventory');
+                }, 2000);
+            } else {
+                setStatus('error');
             }
-            // Si el error es legible, lo mostramos, si no uno genérico
-            setError(err.message || "Error al certificar el lote. Inténtalo de nuevo.");
+        } catch (e) {
+            console.error(e);
+            setStatus('error');
         } finally {
             setLoading(false);
         }
-    };
-
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[80vh] px-6 text-center animate-in fade-in">
-                <Loader2 className="w-12 h-12 text-gold-matte animate-spin mb-6" />
-                <h2 className="text-xl font-serif text-olive-deep">
-                    Generando Sello Blockchain e IA...
-                </h2>
-                <p className="text-gray-500 mt-2 text-sm">
-                    Validando parámetros de calidad
-                </p>
-            </div>
-        );
     }
 
-    if (success) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[80vh] px-6 text-center animate-in zoom-in duration-300">
-                <CheckCircle2 className="w-16 h-16 text-green-600 mb-6" />
-                <h2 className="text-2xl font-serif text-olive-deep mb-2">
-                    ¡Lote Certificado!
-                </h2>
-                <p className="text-gray-600">
-                    El lote ha sido registrado correctamente en la blockchain.
-                </p>
-                <button
-                    onClick={() => setSuccess(false)}
-                    className="mt-8 px-6 py-2 bg-olive-deep text-bone rounded-full text-sm font-medium"
-                >
-                    Certificar otro
-                </button>
-            </div>
-        );
-    }
+    // Generate acidity options 0.1 to 0.9
+    const acidityOptions = Array.from({ length: 9 }, (_, i) => ((i + 1) / 10).toFixed(1));
 
     return (
-        <main className="min-h-screen px-6 pt-12 pb-24">
-            <header className="mb-8">
-                <h1 className="text-3xl font-serif text-olive-deep mb-2">Nuevo Lote</h1>
-                <p className="text-gray-500">Registra y certifica la producción</p>
-            </header>
+        <main className="min-h-screen bg-neutral-50 p-6 flex flex-col items-center">
+            <CertioLogo variant="dark" fixed={true} />
 
-            <div className="space-y-8">
-                <section>
-                    <label className="block text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider pl-1">
-                        Variedad
-                    </label>
-                    <div className="flex flex-wrap gap-3">
-                        {varieties.map((v) => (
-                            <button
-                                key={v}
-                                onClick={() => setVariety(v)}
-                                className={`px-6 py-3 rounded-full border transition-all duration-300 transform hover:scale-105 active:scale-95 ${variety === v
-                                    ? "bg-olive-deep text-bone border-olive-deep shadow-lg shadow-olive-deep/30 ring-2 ring-gold-matte ring-offset-2 ring-offset-bone"
-                                    : "bg-white text-gray-600 border-gray-100 hover:border-gold-matte hover:text-olive-deep hover:shadow-md"
-                                    }`}
-                            >
-                                {v}
-                            </button>
-                        ))}
-                    </div>
-                </section>
+            <div className="w-full max-w-4xl mt-20 text-center">
+                <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 animate-in slide-in-from-bottom-5 duration-700">
 
-                <section>
-                    <label className="block text-sm font-medium text-gray-400 mb-3 uppercase tracking-wider pl-1">
-                        Acidez (%)
-                    </label>
-                    <div className="relative group">
-                        <select
-                            value={acidity}
-                            onChange={(e) => setAcidity(e.target.value)}
-                            className="w-full appearance-none bg-white border border-gray-100 rounded-2xl px-5 py-4 text-olive-deep font-medium transition-all duration-300 group-hover:border-gold-matte/50 focus:outline-none focus:border-gold-matte focus:ring-4 focus:ring-gold-matte/10 shadow-sm group-hover:shadow-md"
-                        >
-                            {acidities.map((a) => (
-                                <option key={a} value={a}>{a}°</option>
-                            ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-5 text-gray-400 group-hover:text-gold-matte transition-colors">
-                            <svg className="fill-current h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z" /></svg>
+                    {status === 'success' ? (
+                        <div className="py-12 flex flex-col items-center animate-in zoom-in-50 duration-500">
+                            <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+                                <CheckCircle2 size={48} />
+                            </div>
+                            <h2 className="text-3xl font-serif text-olive-deep mb-2">¡Lote Certificado!</h2>
+                            <p className="text-gray-500">Datos y ubicación registrados en Blockchain.</p>
+                            <p className="text-sm text-green-600 mt-4 font-bold animate-pulse">Redirigiendo al inventario...</p>
                         </div>
-                    </div>
-                </section>
+                    ) : (
+                        <>
+                            <div className="mb-8">
+                                <h1 className="text-4xl font-serif text-olive-deep mb-2">Certificar Lote</h1>
+                                <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                                    <MapPin size={14} className={location ? "text-green-500" : "text-gray-400"} />
+                                    {location ? (
+                                        <span className="text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">
+                                            {location.lat.toFixed(4)}, {location.lng.toFixed(4)}
+                                        </span>
+                                    ) : (
+                                        <span className="text-amber-500">{locationError || "Detectando ubicación..."}</span>
+                                    )}
+                                </div>
+                            </div>
 
-                {error && (
-                    <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm">
-                        {error}
-                    </div>
-                )}
+                            <form action={handleSubmit} className="text-left max-w-2xl mx-auto">
+                                <div className="flex flex-col md:flex-row gap-8 items-start">
 
-                <button
-                    onClick={handleCertify}
-                    className="w-full relative group overflow-hidden bg-gradient-to-r from-gold-matte to-yellow-600 text-white font-bold tracking-brand py-5 rounded-2xl shadow-xl shadow-gold-matte/30 transition-all duration-300 hover:shadow-2xl hover:shadow-gold-matte/40 hover:-translate-y-1 active:scale-[0.98]"
-                >
-                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out" />
-                    <span className="relative z-10 flex items-center justify-center gap-2">
-                        Certificar Lote
-                        <CheckCircle2 className="w-5 h-5 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
-                    </span>
-                </button>
+                                    {/* Columna Izquierda: Variedad */}
+                                    <div className="flex-1 w-full space-y-4">
+                                        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">Variedad</label>
+                                        <div className="flex flex-col gap-3">
+                                            {['Picual', 'Arbequina', 'Hojiblanca'].map((v) => (
+                                                <button
+                                                    key={v}
+                                                    type="button"
+                                                    onClick={() => setSelectedVariety(v)}
+                                                    className={`p-4 rounded-2xl border-2 text-lg font-bold transition-all duration-200 flex items-center justify-between ${selectedVariety === v
+                                                            ? 'border-olive-deep bg-olive-deep text-white shadow-lg scale-[1.02]'
+                                                            : 'border-gray-100 bg-white text-gray-600 hover:border-gray-200 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    {v}
+                                                    {selectedVariety === v && <div className="w-3 h-3 bg-white rounded-full"></div>}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Columna Derecha: Acidez y Botón */}
+                                    <div className="flex-1 w-full space-y-8">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Acidez Máxima (%)</label>
+                                            <div className="relative">
+                                                <select
+                                                    name="acidez"
+                                                    className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl text-2xl font-black text-olive-deep outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/20 appearance-none text-center cursor-pointer transition-all"
+                                                >
+                                                    {acidityOptions.map(opt => (
+                                                        <option key={opt} value={opt}>{opt}%</option>
+                                                    ))}
+                                                </select>
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z" /></svg>
+                                                </div>
+                                            </div>
+                                            <p className="text-center text-xs text-gray-400 mt-2">Nivel de acidez detectado por sensor</p>
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            disabled={loading}
+                                            className="w-full py-5 bg-olive-deep text-white text-xl font-bold rounded-2xl hover:bg-olive-deep/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none flex items-center justify-center gap-3"
+                                        >
+                                            {loading ? (
+                                                <>
+                                                    <Loader2 className="animate-spin w-6 h-6" /> Procesando...
+                                                </>
+                                            ) : (
+                                                "CERTIFICAR AHORA"
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {status === 'error' && (
+                                    <div className="mt-6 p-4 bg-red-50 text-red-600 rounded-xl text-center text-sm font-medium animate-in fade-in">
+                                        <AlertCircle size={16} className="inline mr-2 mb-0.5" />
+                                        Error de conexión al Blockchain. Verifica tu conexión.
+                                    </div>
+                                )}
+                            </form>
+                        </>
+                    )}
+                </div>
             </div>
         </main>
     );
